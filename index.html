@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prendas de Natal</title>
+<style>
+:root{--bg:#fbf7f2;--card:#fff;--tx:#241a17;--mu:#6f625b;--ac:#b3261e;--ok:#2e7d4f;--bd:#e8ddd3;--ac2:#fde8e6}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1614;--card:#2a211e;--tx:#f4ebe6;--mu:#b3a39a;--ac:#ff6b60;--ok:#6fcf97;--bd:#43352f;--ac2:#4a2522}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:17px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:19px;margin:0}h3{font-size:16px;margin:0}
+.mu{color:var(--mu);font-size:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin:12px 0}
+button{font:inherit;border:0;border-radius:10px;padding:11px 16px;background:var(--ac);color:#fff;cursor:pointer}
+button.s{background:var(--ac2);color:var(--ac)}button.g{background:none;color:var(--mu);padding:6px 8px;font-size:14px}
+button.sm{padding:8px 12px;font-size:15px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.sp{justify-content:space-between}
+.gift{border-top:1px solid var(--bd);padding:10px 0}
+.bar{height:8px;background:var(--bd);border-radius:6px;overflow:hidden;margin:6px 0}.bar i{display:block;height:100%;background:var(--ok)}
+.tag{background:var(--ac2);color:var(--ac);border-radius:8px;padding:3px 9px;font-size:13px}
+.mine{outline:2px solid var(--ok);outline-offset:6px;border-radius:6px}
+dialog{border:0;border-radius:14px;background:var(--card);color:var(--tx);width:min(92vw,420px);padding:18px}
+dialog::backdrop{background:#0008}
+label{display:block;font-size:14px;color:var(--mu);margin-top:10px}
+input{width:100%;font:inherit;padding:11px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx)}
+a{color:var(--ac)}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<dialog id="dlg"><div><h2 id="dt"></h2><div id="df"></div>
+<div class="row" style="margin-top:16px;justify-content:flex-end"><button class="s" id="dc">Cancelar</button><button id="dok">Guardar</button></div></div></dialog>
+<script>
+const U="https://lsrzxgwfyuhhfqmcvufi.supabase.co",K="sb_publishable_emiQIfRpMyburgf9Cer8ZQ_ep50cVsG";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const eur=n=>(+n||0).toLocaleString("pt-PT",{style:"currency",currency:"EUR"});
+const err=e=>alert(e&&e.message||e);
+let ses=null,D=null,rev=false;
+try{ses=JSON.parse(localStorage.getItem("pn")||"null")}catch(e){}
+const save=()=>{try{ses?localStorage.setItem("pn",JSON.stringify(ses)):localStorage.removeItem("pn")}catch(e){}};
+
+async function rpc(fn,a){
+  const r=await fetch(U+"/rest/v1/rpc/"+fn,{method:"POST",headers:{apikey:K,"Content-Type":"application/json"},body:JSON.stringify(a)});
+  const j=await r.json().catch(()=>null);
+  if(!r.ok)throw new Error((j&&j.message)||"Erro de ligação");return j;
+}
+const call=async(fn,a={})=>{await rpc(fn,{p_m:ses.m,p_pin:ses.pin,...a});await load()};
+async function load(){
+  if(!ses){render();return}
+  try{D=await rpc("snapshot",{p_m:ses.m,p_pin:ses.pin});}
+  catch(e){if(/PIN/.test(e.message)){ses=null;save();D=null}}
+  render();
+}
+function form(title,fields,cb){
+  $("#dt").textContent=title;
+  $("#df").innerHTML=fields.map(f=>`<label>${esc(f.l)}<input id="f_${f.k}" type="${f.t||"text"}" ${f.t==="number"?'step="0.01" min="0" inputmode="decimal"':""} ${f.t==="pin"?'inputmode="numeric" maxlength="8"':""} value="${esc(f.v??"")}"></label>`).join("");
+  $("#dok").onclick=async()=>{const v={};fields.forEach(f=>v[f.k]=$("#f_"+f.k).value.trim());
+    try{await cb(v);$("#dlg").close()}catch(e){err(e)}};
+  $("#dc").onclick=()=>$("#dlg").close();$("#dlg").showModal();
+}
+const nm=id=>(D.members.find(m=>m.id===id)||{}).name||"Alguém";
+
+function render(){
+  const app=$("#app");
+  if(!ses||!D){
+    app.innerHTML=`<h1>🎄 Prendas de Natal</h1><p class="mu">Entra no grupo da família.</p>
+    <div class="card"><label>Código do grupo<input id="c" autocapitalize="characters"></label>
+    <label>O teu nome<input id="n"></label><label>PIN (4 dígitos)<input id="p" type="password" inputmode="numeric" maxlength="8"></label>
+    <div class="row" style="margin-top:14px"><button data-a="login">Entrar</button><button class="s" data-a="newg">Criar grupo novo</button></div>
+    <p class="mu">Primeira vez? Escolhe o teu PIN e fica registado. Nas próximas vezes usa o mesmo nome e PIN.</p></div>`;
+    return;
+  }
+  const g=D.group,kids=D.children;
+  app.innerHTML=`<div class="row sp"><h1>${esc(g.name)}</h1><button class="g" data-a="out">Sair (${esc(nm(ses.m))})</button></div>
+  <div class="row"><span class="tag">Código: ${esc(g.code)}</span><span class="mu">${D.members.length} adultos · ${kids.length} crianças</span></div>
+  <p class="mu">Membros: ${D.members.map(m=>esc(m.name)).join(", ")}</p>
+  ${ssHtml()}
+  <button data-a="newc">+ Adicionar criança</button>
+  ${kids.map(kidHtml).join("")||'<div class="card mu">Ainda não há crianças neste grupo.</div>'}`;
+}
+function ssHtml(){
+  const g=D.group;let b;
+  if(!g.drawn)b='<div class="mu">Ainda não foi feito o sorteio.</div>';
+  else if(!D.secret)b='<div class="mu">Entraste depois do sorteio. Pede para refazer.</div>';
+  else b=rev?`<div>🎁 Ofereces a: <b>${esc(nm(D.secret))}</b>${+g.draw_max?` · máx. ${eur(g.draw_max)}`:""}</div><button class="sm g" data-a="hide">Esconder</button>`:'<button class="sm s" data-a="reveal">Ver o meu amigo secreto</button>';
+  return `<div class="card"><div class="row sp"><h2>🎅 Amigo secreto</h2><button class="sm ${g.drawn?"g":""}" data-a="draw">${g.drawn?"Refazer":"Sortear"}</button></div>${b}</div>`;
+}
+function kidHtml(k){
+  const isP=k.parent_id===ses.m,gifts=D.gifts.filter(x=>x.child_id===k.id),
+    myP=D.pledges.find(p=>p.child_id===k.id&&p.member_id===ses.m);
+  return `<div class="card"><div class="row sp"><h2>🧒 ${esc(k.name)}${k.age?` <span class="mu">(${esc(k.age)})</span>`:""}</h2>
+  ${isP?`<button class="g" data-a="delc" data-id="${k.id}">Remover</button>`:""}</div>
+  <div class="mu">Pai/mãe: ${esc(nm(k.parent_id))}${isP?" · não contribuis para as prendas dos teus filhos":""}</div>
+  ${gifts.map(x=>{
+    const ps=D.pledges.filter(p=>p.gift_id===x.id),tot=ps.reduce((a,p)=>a+ +p.amount,0),
+      pct=x.price?Math.min(100,tot/x.price*100):0,mp=myP&&myP.gift_id===x.id;
+    return `<div class="gift"><div class="row sp"><h3>${esc(x.title)}</h3><b>${eur(x.price)}</b></div>
+    ${x.link&&/^https?:\/\//.test(x.link)?`<a href="${esc(x.link)}" target="_blank" rel="noopener noreferrer" class="mu">ver ligação</a>`:""}
+    <div class="bar"><i style="width:${pct}%"></i></div>
+    <div class="mu">${eur(tot)} de ${eur(x.price)} · ${ps.length} ${ps.length===1?"participante":"participantes"}${ps.length?": "+ps.map(p=>esc(nm(p.member_id))+" "+eur(p.amount)).join(", "):""}</div>
+    <div class="mu">Máx. por adulto: <b>${+x.budget?eur(x.budget):"sem limite"}</b></div>
+    <div class="row" style="margin-top:8px"><span class="${mp?"mine":""}"></span>
+    ${isP?"":mp?`<button class="sm s" data-a="pledge" data-id="${x.id}">✔ Participas com ${eur(myP.amount)} (alterar)</button><button class="sm g" data-a="unpledge" data-id="${k.id}">Sair</button>`
+      :`<button class="sm" data-a="pledge" data-id="${x.id}">${myP?"Mudar para esta prenda":"Participar"}</button>`}
+    ${x.by_id===ses.m?`<button class="sm g" data-a="delg" data-id="${x.id}">Apagar</button>`:""}</div></div>`}).join("")||'<div class="mu" style="margin-top:8px">Sem sugestões ainda.</div>'}
+  ${isP?`<button class="sm s" data-a="newgift" data-id="${k.id}" style="margin-top:8px">+ Sugerir prenda</button>`:""}
+  ${!isP&&myP?`<div class="mu" style="margin-top:8px">Só podes participar numa prenda por criança.</div>`:""}</div>`;
+}
+document.addEventListener("click",async e=>{
+  const t=e.target.closest("[data-a]");if(!t)return;
+  const a=t.dataset.a,id=t.dataset.id;
+  try{
+  if(a==="login"){const c=$("#c").value,n=$("#n").value,p=$("#p").value;
+    const m=await rpc("join_group",{p_code:c,p_name:n,p_pin:p});ses={m,pin:p};save();await load()}
+  else if(a==="newg")form("Novo grupo",[{k:"g",l:"Nome do grupo (ex.: Família Silva)"},{k:"n",l:"O teu nome"},{k:"p",l:"PIN (4 dígitos)",t:"pin"}],async v=>{
+    const r=await rpc("create_group",{p_group:v.g,p_name:v.n,p_pin:v.p});ses={m:r.member,pin:v.p};save();await load()});
+  else if(a==="out"){ses=null;D=null;save();render()}
+  else if(a==="reveal"){rev=true;render()}
+  else if(a==="hide"){rev=false;render()}
+  else if(a==="draw"){
+    if(D.group.drawn&&!confirm("Isto substitui o sorteio anterior. Continuar?"))return;
+    form("Sorteio do amigo secreto",[{k:"m",l:"Valor máximo (€, opcional)",t:"number"}],async v=>{rev=false;await call("do_draw",{p_max:parseFloat(v.m)||0})})}
+  else if(a==="newc")form("Nova criança",[{k:"n",l:"Nome"},{k:"a",l:"Idade"}],v=>call("add_child",{p_name:v.n,p_age:v.a}));
+  else if(a==="delc"){if(confirm("Remover criança e prendas?"))await call("del_child",{p_id:id})}
+  else if(a==="newgift")form("Sugerir prenda",[{k:"t",l:"Prenda"},{k:"p",l:"Preço total (€)",t:"number"},{k:"b",l:"Máximo por adulto (€, opcional)",t:"number"},{k:"l",l:"Ligação (opcional)"}],v=>call("add_gift",{p_child:id,p_title:v.t,p_price:parseFloat(v.p)||0,p_budget:parseFloat(v.b)||0,p_link:v.l}));
+  else if(a==="delg"){if(confirm("Apagar prenda?"))await call("del_gift",{p_id:id})}
+  else if(a==="pledge"){
+    const x=D.gifts.find(z=>z.id===id),old=D.pledges.find(p=>p.gift_id===id&&p.member_id===ses.m);
+    form("Quanto queres contribuir?",[{k:"v",l:+x.budget?`Valor (máx. ${eur(x.budget)})`:"Valor (€)",t:"number",v:old?old.amount:(+x.budget||"")}],v=>call("pledge",{p_gift:id,p_amount:parseFloat(v.v)||0}))}
+  else if(a==="unpledge")await call("unpledge",{p_child:id});
+  }catch(x){err(x)}
+});
+load();
+setInterval(()=>{if(ses&&!$("#dlg").open)load()},20000);
+</script>
+</body>
+</html>
