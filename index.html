@@ -24,7 +24,7 @@ button.sm{padding:8px 12px;font-size:15px}
 dialog{border:0;border-radius:14px;background:var(--card);color:var(--tx);width:min(92vw,420px);padding:18px}
 dialog::backdrop{background:#0008}
 label{display:block;font-size:14px;color:var(--mu);margin-top:10px}
-input{width:100%;font:inherit;padding:11px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx)}
+input,select{width:100%;font:inherit;padding:11px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx)}
 a{color:var(--ac)}
 </style>
 </head>
@@ -56,7 +56,7 @@ async function load(){
 }
 function form(title,fields,cb){
   $("#dt").textContent=title;
-  $("#df").innerHTML=fields.map(f=>`<label>${esc(f.l)}<input id="f_${f.k}" type="${f.t||"text"}" ${f.t==="number"?'step="0.01" min="0" inputmode="decimal"':""} ${f.t==="pin"?'inputmode="numeric" maxlength="8"':""} value="${esc(f.v??"")}"></label>`).join("");
+  $("#df").innerHTML=fields.map(f=>f.t==="sel"?selHtml(f):`<label>${esc(f.l)}<input id="f_${f.k}" type="${f.t||"text"}" ${f.t==="number"?'step="0.01" min="0" inputmode="decimal"':""} ${f.t==="pin"?'inputmode="numeric" maxlength="8"':""} value="${esc(f.v??"")}"></label>`).join("");
   $("#dok").onclick=async()=>{const v={};fields.forEach(f=>v[f.k]=$("#f_"+f.k).value.trim());
     try{await cb(v);$("#dlg").close()}catch(e){err(e)}};
   $("#dc").onclick=()=>$("#dlg").close();$("#dlg").showModal();
@@ -81,19 +81,21 @@ function render(){
   <button data-a="newc">+ Adicionar criança</button>
   ${kids.map(kidHtml).join("")||'<div class="card mu">Ainda não há crianças neste grupo.</div>'}`;
 }
+const fixLink=l=>l&&!/^https?:\/\//i.test(l)?"https://"+l:l;
+const selHtml=f=>`<label>${esc(f.l)}<select id="f_${f.k}">${f.o.map(o=>`<option value="${esc(o[0])}" ${o[0]===f.v?"selected":""}>${esc(o[1])}</option>`).join("")}</select></label>`;
 function ssHtml(){
-  const g=D.group;let b;
-  if(!g.drawn)b='<div class="mu">Ainda não foi feito o sorteio.</div>';
-  else if(!D.secret)b='<div class="mu">Entraste depois do sorteio. Pede para refazer.</div>';
+  const g=D.group,isC=g.creator===ses.m;let b;
+  if(!g.drawn)b='<div class="mu">Ainda não foi feito o sorteio.'+(isC?"":" Só "+esc(nm(g.creator))+" (quem criou o grupo) pode sortear.")+'</div>';
+  else if(!D.secret)b='<div class="mu">Entraste depois do sorteio. Pede a quem criou o grupo para desbloquear e sortear de novo.</div>';
   else b=rev?`<div>🎁 Ofereces a: <b>${esc(nm(D.secret))}</b>${+g.draw_max?` · máx. ${eur(g.draw_max)}`:""}</div><button class="sm g" data-a="hide">Esconder</button>`:'<button class="sm s" data-a="reveal">Ver o meu amigo secreto</button>';
-  return `<div class="card"><div class="row sp"><h2>🎅 Amigo secreto</h2><button class="sm ${g.drawn?"g":""}" data-a="draw">${g.drawn?"Refazer":"Sortear"}</button></div>${b}</div>`;
+  return `<div class="card"><div class="row sp"><h2>🎅 Amigo secreto</h2>${isC?(g.drawn?'<button class="sm g" data-a="unlock">Desbloquear</button>':'<button class="sm" data-a="draw">Sortear</button>'):""}</div>${b}${g.drawn&&D.incomplete?'<div class="mu">⚠ Há adultos sem amigo secreto (entraram depois do sorteio).</div>':""}</div>`;
 }
 function kidHtml(k){
-  const isP=k.parent_id===ses.m,gifts=D.gifts.filter(x=>x.child_id===k.id),
+  const own=k.parent_id===ses.m,isP=own||k.parent2_id===ses.m,gifts=D.gifts.filter(x=>x.child_id===k.id),
     myP=D.pledges.find(p=>p.child_id===k.id&&p.member_id===ses.m);
   return `<div class="card"><div class="row sp"><h2>🧒 ${esc(k.name)}${k.age?` <span class="mu">(${esc(k.age)})</span>`:""}</h2>
-  ${isP?`<button class="g" data-a="delc" data-id="${k.id}">Remover</button>`:""}</div>
-  <div class="mu">Pai/mãe: ${esc(nm(k.parent_id))}${isP?" · não contribuis para as prendas dos teus filhos":""}</div>
+  ${own?`<button class="g" data-a="delc" data-id="${k.id}">Remover</button>`:""}</div>
+  <div class="mu">Pais: ${esc(nm(k.parent_id))}${k.parent2_id?" e "+esc(nm(k.parent2_id)):""}${isP?" · não contribuis para as prendas dos teus filhos":""} ${own?`<button class="sm g" data-a="setp2" data-id="${k.id}">${k.parent2_id?"Mudar":"+ Outro pai/mãe"}</button>`:""}</div>
   ${gifts.map(x=>{
     const ps=D.pledges.filter(p=>p.gift_id===x.id),tot=ps.reduce((a,p)=>a+ +p.amount,0),
       pct=x.price?Math.min(100,tot/x.price*100):0,mp=myP&&myP.gift_id===x.id;
@@ -105,7 +107,7 @@ function kidHtml(k){
     <div class="row" style="margin-top:8px"><span class="${mp?"mine":""}"></span>
     ${isP?"":mp?`<button class="sm s" data-a="pledge" data-id="${x.id}">✔ Participas com ${eur(myP.amount)} (alterar)</button><button class="sm g" data-a="unpledge" data-id="${k.id}">Sair</button>`
       :`<button class="sm" data-a="pledge" data-id="${x.id}">${myP?"Mudar para esta prenda":"Participar"}</button>`}
-    ${x.by_id===ses.m?`<button class="sm g" data-a="delg" data-id="${x.id}">Apagar</button>`:""}</div></div>`}).join("")||'<div class="mu" style="margin-top:8px">Sem sugestões ainda.</div>'}
+    ${isP?`<button class="sm g" data-a="editg" data-id="${x.id}">Editar</button><button class="sm g" data-a="delg" data-id="${x.id}">Apagar</button>`:""}</div></div>`}).join("")||'<div class="mu" style="margin-top:8px">Sem sugestões ainda.</div>'}
   ${isP?`<button class="sm s" data-a="newgift" data-id="${k.id}" style="margin-top:8px">+ Sugerir prenda</button>`:""}
   ${!isP&&myP?`<div class="mu" style="margin-top:8px">Só podes participar numa prenda por criança.</div>`:""}</div>`;
 }
@@ -121,11 +123,16 @@ document.addEventListener("click",async e=>{
   else if(a==="reveal"){rev=true;render()}
   else if(a==="hide"){rev=false;render()}
   else if(a==="draw"){
-    if(D.group.drawn&&!confirm("Isto substitui o sorteio anterior. Continuar?"))return;
+    
     form("Sorteio do amigo secreto",[{k:"m",l:"Valor máximo (€, opcional)",t:"number"}],async v=>{rev=false;await call("do_draw",{p_max:parseFloat(v.m)||0})})}
+  else if(a==="unlock"){if(confirm("Isto apaga o sorteio atual e ninguém verá o seu amigo secreto até sortearem de novo. Continuar?")){rev=false;await call("unlock_draw")}}
+  else if(a==="editg"){const x=D.gifts.find(z=>z.id===id);
+    form("Editar prenda",[{k:"t",l:"Prenda",v:x.title},{k:"p",l:"Preço total (€)",t:"number",v:x.price},{k:"b",l:"Máximo por adulto (€, opcional)",t:"number",v:+x.budget||""},{k:"l",l:"Ligação (opcional)",v:x.link||""}],v=>call("edit_gift",{p_id:id,p_title:v.t,p_price:parseFloat(v.p)||0,p_budget:parseFloat(v.b)||0,p_link:fixLink(v.l)}))}
+  else if(a==="setp2"){const k=D.children.find(z=>z.id===id);
+    form("Outro pai/mãe",[{k:"x",l:"Escolhe quem",t:"sel",o:[["","— ninguém —"],...D.members.filter(m=>m.id!==ses.m).map(m=>[m.id,m.name])],v:k.parent2_id||""}],v=>call("set_parent2",{p_child:id,p_parent2:v.x||null}))}
   else if(a==="newc")form("Nova criança",[{k:"n",l:"Nome"},{k:"a",l:"Idade"}],v=>call("add_child",{p_name:v.n,p_age:v.a}));
   else if(a==="delc"){if(confirm("Remover criança e prendas?"))await call("del_child",{p_id:id})}
-  else if(a==="newgift")form("Sugerir prenda",[{k:"t",l:"Prenda"},{k:"p",l:"Preço total (€)",t:"number"},{k:"b",l:"Máximo por adulto (€, opcional)",t:"number"},{k:"l",l:"Ligação (opcional)"}],v=>call("add_gift",{p_child:id,p_title:v.t,p_price:parseFloat(v.p)||0,p_budget:parseFloat(v.b)||0,p_link:v.l}));
+  else if(a==="newgift")form("Sugerir prenda",[{k:"t",l:"Prenda"},{k:"p",l:"Preço total (€)",t:"number"},{k:"b",l:"Máximo por adulto (€, opcional)",t:"number"},{k:"l",l:"Ligação (opcional)"}],v=>call("add_gift",{p_child:id,p_title:v.t,p_price:parseFloat(v.p)||0,p_budget:parseFloat(v.b)||0,p_link:fixLink(v.l)}));
   else if(a==="delg"){if(confirm("Apagar prenda?"))await call("del_gift",{p_id:id})}
   else if(a==="pledge"){
     const x=D.gifts.find(z=>z.id===id),old=D.pledges.find(p=>p.gift_id===id&&p.member_id===ses.m);
