@@ -81,14 +81,15 @@ function render(){
   <button data-a="newc">+ Adicionar criança</button>
   ${kids.map(kidHtml).join("")||'<div class="card mu">Ainda não há crianças neste grupo.</div>'}`;
 }
+const rangeTxt=g=>{const a=+g.draw_min,b=+g.draw_max;return a&&b?"entre "+eur(a)+" e "+eur(b):b?"máx. "+eur(b):a?"mín. "+eur(a):""};
 const fixLink=l=>l&&!/^https?:\/\//i.test(l)?"https://"+l:l;
 const selHtml=f=>`<label>${esc(f.l)}<select id="f_${f.k}">${f.o.map(o=>`<option value="${esc(o[0])}" ${o[0]===f.v?"selected":""}>${esc(o[1])}</option>`).join("")}</select></label>`;
 function ssHtml(){
   const g=D.group,isC=g.creator===ses.m;let b;
   if(!g.drawn)b='<div class="mu">Ainda não foi feito o sorteio.'+(isC?"":" Só "+esc(nm(g.creator))+" (quem criou o grupo) pode sortear.")+'</div>';
   else if(!D.secret)b='<div class="mu">Entraste depois do sorteio. Pede a quem criou o grupo para desbloquear e sortear de novo.</div>';
-  else b=rev?`<div>🎁 Ofereces a: <b>${esc(nm(D.secret))}</b>${+g.draw_max?` · máx. ${eur(g.draw_max)}`:""}</div><button class="sm g" data-a="hide">Esconder</button>`:'<button class="sm s" data-a="reveal">Ver o meu amigo secreto</button>';
-  return `<div class="card"><div class="row sp"><h2>🎅 Amigo secreto</h2>${isC?(g.drawn?'<button class="sm g" data-a="unlock">Desbloquear</button>':'<button class="sm" data-a="draw">Sortear</button>'):""}</div>${b}${g.drawn&&D.incomplete?'<div class="mu">⚠ Há adultos sem amigo secreto (entraram depois do sorteio).</div>':""}</div>`;
+  else b=rev?`<div>🎁 Ofereces a: <b>${esc(nm(D.secret))}</b>${rangeTxt(g)?" · "+rangeTxt(g):""}</div><button class="sm g" data-a="hide">Esconder</button>`:'<button class="sm s" data-a="reveal">Ver o meu amigo secreto</button>';
+  return `<div class="card"><div class="row sp"><h2>🎅 Amigo secreto</h2>${isC?(g.drawn?'<button class="sm g" data-a="range">Valores</button><button class="sm g" data-a="unlock">Desbloquear</button>':'<button class="sm" data-a="draw">Sortear</button>'):""}</div>${b}${g.drawn&&rangeTxt(g)?`<div class="mu">Valor da prenda: ${rangeTxt(g)}</div>`:""}${g.drawn&&D.incomplete?'<div class="mu">⚠ Há adultos sem amigo secreto (entraram depois do sorteio).</div>':""}</div>`;
 }
 function kidHtml(k){
   const own=k.parent_id===ses.m,isP=own||k.parent2_id===ses.m,gifts=D.gifts.filter(x=>x.child_id===k.id),
@@ -124,7 +125,8 @@ document.addEventListener("click",async e=>{
   else if(a==="hide"){rev=false;render()}
   else if(a==="draw"){
     
-    form("Sorteio do amigo secreto",[{k:"m",l:"Valor máximo (€, opcional)",t:"number"}],async v=>{rev=false;await call("do_draw",{p_max:parseFloat(v.m)||0})})}
+    form("Sorteio do amigo secreto",[{k:"a",l:"Valor mínimo da prenda (€, opcional)",t:"number"},{k:"m",l:"Valor máximo da prenda (€, opcional)",t:"number"}],async v=>{rev=false;await call("do_draw",{p_min:parseFloat(v.a)||0,p_max:parseFloat(v.m)||0})})}
+  else if(a==="range")form("Valor da prenda do amigo secreto",[{k:"a",l:"Mínimo (€, opcional)",t:"number",v:+D.group.draw_min||""},{k:"m",l:"Máximo (€, opcional)",t:"number",v:+D.group.draw_max||""}],v=>call("set_draw_range",{p_min:parseFloat(v.a)||0,p_max:parseFloat(v.m)||0}));
   else if(a==="unlock"){if(confirm("Isto apaga o sorteio atual e ninguém verá o seu amigo secreto até sortearem de novo. Continuar?")){rev=false;await call("unlock_draw")}}
   else if(a==="editg"){const x=D.gifts.find(z=>z.id===id);
     form("Editar prenda",[{k:"t",l:"Prenda",v:x.title},{k:"p",l:"Preço total (€)",t:"number",v:x.price},{k:"b",l:"Máximo por adulto (€, opcional)",t:"number",v:+x.budget||""},{k:"l",l:"Ligação (opcional)",v:x.link||""}],v=>call("edit_gift",{p_id:id,p_title:v.t,p_price:parseFloat(v.p)||0,p_budget:parseFloat(v.b)||0,p_link:fixLink(v.l)}))}
